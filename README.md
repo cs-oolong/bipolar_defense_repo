@@ -16,7 +16,7 @@ python eval_full.py
 
 ## Repository Structure
 
-- `paper/`: Contains the LaTeX source for the research paper.
+- `paper/`: Contains the finalized research paper (PDF).
 - `code/`: Core evaluation and circuit discovery scripts.
   - `circuit_discovery_gcg.py`: Mapping safety-relevant attention heads.
   - `adaptive_defense.py`: Implementation of the zero-shot threshold gating.
