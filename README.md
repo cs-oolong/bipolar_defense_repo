@@ -5,6 +5,15 @@ This repository contains the official code and paper source for the study of int
 ## Abstract
 Recent advances in mechanistic interpretability have demonstrated that safety mechanisms in Large Language Models (LLMs) often reside in sparse, targetable circuits. We present an empirical evaluation of internal safety circuits in Qwen2.5-7B through activation patching. We introduce a purely mechanized "bipolar" defense that simultaneously amplifies refusal heads and suppresses compliance heads. Against white-box adversarial attacks (nanoGCG), we find that unconditional bipolar assertion achieves a lower attack success rate (33% ASR) than conditional variants (36% ASR). This reveals a selectivity--robustness tradeoff: the precision benefit of conditional gating creates an exploitable structural vulnerability under white-box optimization.
 
+## Reproducibility
+
+To reproduce the findings in the paper, navigate to the `code/` directory and run the evaluation suite:
+```bash
+cd code/
+python eval_full.py
+```
+*Note: Ensure `circuit_map.json`, `advbench.csv`, and `steering_vectors_50.pt` are present in the `code/` folder (included in this repository).*
+
 ## Repository Structure
 
 - `paper/`: Contains the LaTeX source for the research paper.
