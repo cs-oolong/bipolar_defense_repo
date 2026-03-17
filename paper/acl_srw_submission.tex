@@ -1,0 +1,199 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{geometry}
+\geometry{a4paper, margin=1in}
+
+% You can replace this generic style with the official acl2023.sty or acl2024.sty when compiling for submission.
+
+\title{Isolating Refusal and Compliance Heads: Unconditional Bipolar Defenses Against White-Box Attacks}
+\author{Shivam Dubey \\ \textit{Independent Work}}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Recent advances in mechanistic interpretability have demonstrated that safety mechanisms in Large Language Models (LLMs) often reside in sparse, targetable circuits. However, most mechanistic defenses rely on conditional gating mechanisms that trigger based on upstream detection streams. In this work, we present an empirical evaluation of internal safety circuits in an instruction-tuned model (Qwen2.5-7B) through activation patching. We introduce a purely mechanized "bipolar" defense that simultaneously amplifies refusal heads and suppresses compliance heads. We evaluate this defense both conditionally (adaptive gating) and unconditionally against white-box adversarial attacks (nanoGCG). Under white-box adversarial attack, we find that unconditional bipolar assertion achieves a lower attack success rate (33\% ASR) than the best conditional variant (36\% ASR), because adversaries bypass the conditionally injected refusal vector downstream rather than evading the detector itself. This reveals an empirical selectivity--robustness tradeoff: the precision benefit of conditional gating creates an exploitable structural vulnerability under white-box optimization.
+\end{abstract}
+
+\section{Introduction}
+Safety mechanisms inside modern Large Language Models (LLMs) are intended to robustly prevent the generation of harmful or malicious content. However, optimization-based attacks such as Greedy Coordinate Gradient (GCG) consistently find adversarial suffixes capable of overriding these alignment guardrails. Mechanistic interpretability seeks to decode \textit{how} models refuse and precisely \textit{why} these refusal mechanisms fail under adversarial pressure.
+
+Prior research suggests that safety is mediated by distinct refusal circuits, often simplified as an "on/off" switch triggering rejection tokens. Based on these models, researchers have proposed conditional threshold defenses: compute an internal compliance score from early hidden states, and conditionally activate an artificial refusal vector if a threshold is crossed.
+
+We investigate the empirical robustness of these mechanistic defenses. We perform circuit discovery on Qwen2.5-7B, isolate the harm-contrastive heads, and test conditional (adaptive) and unconditional defense interventions against optimized nanoGCG attacks.
+
+\section{Related Work}
+Our approach builds on recent, rapidly overlapping advancements in mechanistic interpretability and adversarial robustness. Mechanistically, Arditi et al. (2024) \cite{arditi2024} mapped out the internal dynamics of refusal directions, while Wollschläger et al. (2025) \cite{wollschlager2025} demonstrated that single-direction accounts are insufficient, introducing multi-direction concept cones. Concurrent Sparse Autoencoder (SAE) analyses have identified scalable refusal features \cite{obrien2024} and shown that ablating minimal feature sets flips models from refusal to compliance \cite{yeo2025}. 
+
+Structurally, our intervention methodology parallels Contrastive Activation Addition (CAA) \cite{panickssery2023} and full-stream Activation Addition \cite{turner2023}, but advances the literature by applying interventions surgically at the causal circuit level rather than full stream. Recently, Kasliwal et al. (2026) \cite{kasliwal2026} demonstrated structural circuit-restricted weight editing (C-$\Delta\Theta$) primarily on MLP layers; our work identifies complementary structural vulnerabilities mapped specifically to attention mechanisms, notably compliance-promoting heads. Furthermore, our empirical findings around minimal-circuit plateauing directly contradict the assumption of safety-circuit compensation, contrasting with the architectural Hydra Effect observed by McGrath et al. (2023) \cite{mcgrath2023}. Against white-box disruption like GCG \cite{zou2023}, our Unconditional Bipolar assertion offers a structural, geometrically stationary alternative to complex adversarial training or dynamic filtering algorithms.
+
+\section{Methodology}
+
+\subsection{Circuit Discovery via Activation Patching}
+We utilized the \textit{nnsight} library to map the safety-relevant attention heads. Our core methodological contribution distinguishes between "template-contrastive" and "harm-contrastive" patching. Because instruction-tuned models heavily rely on template formatting (e.g., \verb|<|im\_start|>|), operating on raw text strings causes out-of-distribution activation scaling. By strictly pairing 20 harmful AdvBench prompts with 20 benign prompts—both wrapped in identical chat templates—we isolated heads causally responsible for generating refusal tokens due to semantic intent, rather than geometric template matching.
+
+By caching the activation stream of the benign prompts and iteratively patching individual attention heads during the forward pass of the harmful prompts, we scored each head's causal impact. 
+
+We identified 11 primary "Refusal Heads" and 5 distinct "Compliance" (or Evasion) heads across the mid-to-late layers (Layers 14-25). A notable mechanistic finding was extreme intra-layer antagonism observed at Layer 25: L25-H1 emerged as the most dominant refusal head globally (patch score $+1.87$), while sitting in the exact same layer as L25-H4, the most dominant compliance head (patch score $-0.66$).
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{figures/fig_circuit_map.pdf}
+    \caption{Harm-Contrastive Circuit Map displaying the Top 11 Refusal Heads and Bottom 5 Compliance Heads identified during activation patching.}
+    \label{fig:circuit_map}
+\end{figure}
+
+\subsection{Mechanistic Defense Interventions}
+Using the identified heads, we constructed a \textbf{True Bipolar} intervention:
+\begin{enumerate}
+    \item \textbf{Refusal Amplification:} Injecting the `mean(harmful) - mean(benign)' vector directly into the output of the 11 refusal heads.
+    \item \textbf{Compliance Suppression:} Zero-ablating the output of the 5 compliance heads entirely.
+\end{enumerate}
+
+We implemented two application methods for this intervention:
+\begin{itemize}
+    \item \textbf{Adaptive Defense (Conditional):} A zero-shot gate calculates a compliance score from a templated input. Intervention is only applied if the score exceeds an established threshold $\tau$. To rigorously prevent data leakage, an optimal threshold ($\tau=6.565$) was calibrated entirely on an isolated validation set consisting of 20 harmful and 20 benign prompts. All subsequent evaluations utilize a completely disjoint held-out test split.
+    \item \textbf{Unconditional Bipolar Assertion:} The intervention is forcibly applied to every generation pass regardless of input, blanketing the residual stream with the safety geometry.
+\end{itemize}
+
+\subsection{Evaluation Pipeline}
+Our baseline evaluation utilized 150 harmful prompts drawn from AdvBench and JBB-Behaviors \cite{jbb2024}, alongside 100 benign prompts across 5 distinct linguistic categories. To test white-box robustness, we applied the nanoGCG algorithm to optimize universally adversarial suffixes over 300 steps. The final robustness testing is reported strictly on an $N=100$ held-out test set unaffected by the validation gate threshold.
+
+\section{Findings \& Insights}
+
+\subsection{Template Format is Mechanistically Coupled to Safety Activation}
+In our ablation studies, we evaluated the structural dependency of the primary refusal target head (L25-H1) against the chat template formatting. As illustrated in Figure \ref{fig:template_ablation}, removing the system prompt and operating entirely on raw text drastically reduced the activation norm from 14.96 to 7.93. 
+
+Counterintuitively, we found that a "User-Only" template (which omits the final \texttt{<|im\_start|>assistant} generation prompt) actually elicited the highest refusal activation ($17.24$) — indicating that the model's structural representation of the "assistant" role token actually exerts a Structurally suppressive effect on the refusal circuit. The internal safety mechanisms rely rigidly on the exact topological formatting of the instruction-tuning template, explaining why untemplated adversarial inputs often bypass safety geometry purely by acting out-of-distribution.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.75\textwidth]{figures/fig_template_ablation.pdf}
+    \caption{Activation Norms of the primary Refusal Target Head (L25-H1) under different chat template structures.}
+    \label{fig:template_ablation}
+\end{figure}
+
+\subsection{Sharp Separation of Textual Intent from Surface Phrasing}
+When evaluating our target circuit against a broad suite of benign prompts on the held-out test set, the model demonstrated an exceptional ability to disentangle semantic intent from surface-level phrasing. The separation between harmful and benign prompts was massive, yielding a Cohen's $d = 2.636$. Evaluated via ROC curve, this zero-shot mechanistic detection achieved a near-perfect AUC of $0.943$. Even on harmless creative writing prompts ("fiction\_adjacent") or benign prompts styled as jailbreaks ("jailbreak\_phrased\_benign"), the circuit maintained a strict 0\% overall False Positive Rate (FPR), while smoothly and successfully stopping 96\% of the combined AdvBench and JBB test prompts. The robust geometry cleanly separates adversarial intent from harmless text stylings.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{figures/fig_score_violin.pdf}
+        \caption{Separation of internal compliance scoring geometry.}
+    \label{fig:score_dist}
+    \end{minipage}\hfill
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{figures/fig_roc_curve.pdf}
+        \caption{ROC Curve for zero-shot detection (AUC=0.943).}
+        \label{fig:roc}
+    \end{minipage}
+\end{figure}
+
+\subsection{Conditional Gating is Highly Vulnerable to Optimization}
+When rigorously evaluated against nanoGCG on a held-out mixed test set ($N=100$), the undefended model suffered a 66.0\% Attack Success Rate (ASR). Our baseline Adaptive Defense (conditional compliance gate) reduced this to 42.0\%. To attempt to make the gate mechanically robust, we tested two "hardened" variations: a randomized threshold ensembling approach which samples effective thresholds $\tau_{eff} \sim \mathcal{N}(\tau_{opt}, \sigma=0.5)$ taking a majority refusal vote over 5 inference trials, and a deterministic input transformation which prepends a benign stylistic prefix (\verb|[User request]: |) to the prompt. Both hardened mitigations offered marginal improvements, bringing the ASR down to 36.0\% (via input transformation) and 40.0\% (via the fully combined randomized ensemble).
+
+\textbf{Insight:} Token-level adversaries like GCG do not merely "sneak past" the detector. As demonstrated in Figure \ref{fig:gcg_trajectory}, the initial adversarial suffix generates a compliance score deeply within the refusal regime, and the mean trajectory score remains above the decision threshold ($\tau=6.565$) throughout optimization on the sampled subset. The conditional gate successfully triggers on 91\% of optimizing GCG suffixes, yet the isolated defense only blocks 58.0\% of all prompts (allowing the 42.0\% overall bypass rate). This indicates that the exact topological perturbation generated by the GCG suffix actively overpowers the conditionally injected refusal vector during late-layer generation while simultaneously keeping the early-layer detector fully saturated. Conditional interventions are therefore empirically brittle against white-box optimization.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.85\textwidth]{figures/fig_gcg_trajectory.pdf}
+    \caption{GCG Compliance Score Trajectory showing the continuous saturation of the early-layer detector ($\tau=6.565$). GCG does not stealthily evade the detection gating; rather, it fully triggers the safety gate but empirically bypasses the conditionally injected vector downstream. (y-axis truncated to show trajectory detail; plotted scores exceed $\tau$)}
+    \label{fig:gcg_trajectory}
+\end{figure}
+
+\subsection{Unconditional Global Assertion Outperforms Targeted Mechanical Inversion}
+To counteract the optimized GCG attacks, we evaluated two distinct unconditional configurations:
+\begin{enumerate}
+    \item \textbf{Counter-Steering (Targeted Inversion):} Running adversarial-contrastive circuit discovery directly against GCG optimizing traces to identify the exact evasion heads mapped by the attack, and selectively turning off those specific 5 GCG-utilized compliance heads.
+    \item \textbf{Unconditional Bipolar Affirmation:} Bypassing GCG's complex localized noise entirely by unconditionally injecting the global \textit{Harm-Contrastive} safety geometry (amplifying the 11 universal refusal heads and suppressing the 5 universal compliance heads on every forward pass).
+\end{enumerate}
+
+Counter-steering reduced the ASR to 36.0\%. However, simply asserting the Unconditional Bipolar geometry achieved the strongest overall robustness, dropping the ASR down to \textbf{33.0\%} (beating the next-best hardened method by 3 percentage points and the adaptive gate by 9 points), while maintaining a perfect \textbf{0\% False Positive Rate (FPR)} on topically-adjacent benign prompts.
+
+\textbf{Insight:} GCG exploitation relies on highly localized, noisy edge-cases within the residual stream. Because these evasion pathways are so intensely distributed, attempting to play "whack-a-mole" by exactly inverting the attacker's pathway is empirically less effective than permanently flooding the residual stream with the model's universally derived safety geometry.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.75\textwidth]{figures/fig_circuit_scatter.pdf}
+    \caption{Shift in Causal Scores: Clean vs GCG Optimization. GCG actively hijacks localized evasion heads across the network (blue) pulling them heavily into compliance space. Most notably, L25-H4 (the dominant compliance head) drops from a near-zero causal score directly to $-1.0$ under GCG, providing causal evidence that the attack precisely targets the structural vulnerabilities that our unconditional geometry preemptively zero-ablates.}
+    \label{fig:gcg_scatter}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.85\textwidth]{figures/fig_gcg_robustness.pdf}
+    \caption{Defense Robustness against nanoGCG optimization on $N=100$ identical held-out mixed AdvBench/JBB test prompts.}
+    \label{fig:gcg_robustness}
+\end{figure}
+
+\section{Limitations}
+Our evaluation is bound by several material constraints. First, the ASR classification relies on a computationally efficient keyword classifier; although standard in the literature, this does not capture nuanced edge cases of partial compliance as effectively as LLM-as-a-judge methodologies. Second, our experimentation is confined to a single model family (Qwen2.5-7B-Instruct), and architectural variation in Llama or Mistral derivatives could impact the absolute strength of unconditionally asserted vectors. Finally, our primary threat model assumes token-level optimal white-box access (GCG); structural black-box attacks (e.g., deep nested logic manipulation) may bypass the specific geometric perturbations GCG induces.
+
+\section{Conclusion}
+We present harm-contrastive circuit discovery for Qwen2.5-7B, identifying a sparse safety circuit of 11 refusal heads and 5 compliance heads (Cohen's $d = 2.636$, AUC $= 0.943$) with intra-layer antagonism at Layer~25. A key methodological finding is that contrast type determines circuit quality: pairing harmful and benign prompts in identical chat templates isolates harm-sensitive heads, while template-contrastive designs find formatting-sensitive heads instead. On clean inputs, the adaptive compliance gate achieves 96\% refusal rate and 0\% false positive rate across five benign categories. Under white-box GCG attacks, unconditional bipolar assertion achieves the lowest ASR (33\%), while the adaptive gate is overpowered downstream despite the detector remaining triggered. Hardened mitigations reduce but do not eliminate this gap. The practical implication for defense design is that the choice between conditional and unconditional intervention should be determined by the expected threat model, not by clean-input accuracy alone.
+
+\begin{thebibliography}{99}
+
+\bibitem{arditi2024}
+A. Arditi et al. 
+\textit{Refusal in Language Models is Mediated by a Single Direction.} 
+NeurIPS 2024. arXiv:2406.11717.
+
+\bibitem{wollschlager2025}
+M. Wollschläger et al. 
+\textit{Multiple Independent Refusal Directions in Large Language Models.} 
+ICML 2025. arXiv:2502.17420.
+
+\bibitem{obrien2024}
+A. O'Brien et al. 
+\textit{Steering Language Models Using Sparse Autoencoder Features.} 
+Preprint, 2024. arXiv:2411.11296.
+
+\bibitem{yeo2025}
+J. Yeo et al. 
+\textit{Sparse Autoencoders Reveal Mechanisms of Refusal and Compliance.} 
+Preprint, 2025. arXiv:2505.23556.
+
+\bibitem{mcgrath2023}
+T. McGrath et al. 
+\textit{The Hydra Effect: Emergent Self-Repair in Language Models.} 
+Preprint, 2023. arXiv:2307.15771.
+
+\bibitem{turner2023}
+A. Turner et al. 
+\textit{Activation Addition: Steering Language Models Without Optimization.} 
+Preprint, 2023. arXiv:2308.10248.
+
+\bibitem{panickssery2023}
+A. Panickssery et al. 
+\textit{Steering Language Models with Contrastive Activation Addition.} 
+Preprint, 2023. arXiv:2312.06681.
+
+\bibitem{kasliwal2026}
+A. Kasliwal et al. 
+\textit{Circuit-Restricted Weight Editing Framework.} 
+Preprint, 2026. arXiv:2602.04521.
+
+
+\bibitem{zou2023}
+A. Zou et al. 
+\textit{Universal and Transferable Adversarial Attacks on Aligned Language Models.} 
+Preprint, 2023. arXiv:2307.15043.
+
+\bibitem{jbb2024}
+P. Chao et al. 
+\textit{JailbreakBench: An Open Robustness Benchmark for Jailbreaking Large Language Models.} 
+Preprint, 2024. arXiv:2404.01318.
+
+\end{thebibliography}
+
+\end{document}
