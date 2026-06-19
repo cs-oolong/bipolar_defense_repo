@@ -103,9 +103,14 @@ def capture_mlp_outputs(model, prompt, num_layers, compliance_nodes=None, head_d
                 for node in compliance_nodes:
                     if node["layer"] == l:
                         s, e = node["head"] * head_dim, (node["head"] + 1) * head_dim
-                        raw[:, -1, s:e] = 0.0
+                        if raw.dim() == 3:
+                            raw[:, -1, s:e] = 0.0
+                        else:
+                            raw[-1, s:e] = 0.0
         for l in range(num_layers):
-            saved[l] = unwrap(model.model.layers[l].mlp.output)[:, -1, :].save()
+            mlp_out = unwrap(model.model.layers[l].mlp.output)
+            sliced = mlp_out[:, -1, :] if mlp_out.dim() == 3 else mlp_out[-1, :].unsqueeze(0)
+            saved[l] = sliced.save()
     return {l: resolve(v).float() for l, v in saved.items()}
 
 
