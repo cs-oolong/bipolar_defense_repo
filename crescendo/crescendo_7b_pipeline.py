@@ -228,6 +228,39 @@ def load_circuit():
     )
 
 
+def load_steering_vectors():
+    """
+    The original GCG-side defense (bipolar_defense_repo/code/adaptive_defense.py) adds a
+    pre-computed steering vector to each refusal head's output:
+        o_proj.input[..., -1, s:e] += multiplier * v
+    where v = mean(head_output | chat_template) - mean(head_output | raw_text), averaged
+    over 50 harmful prompts. This is the mechanism that actually achieved 66%->33% ASR.
+
+    Every Crescendo script up to now instead did `hidden[:, -1, s:e] *= multiplier` -
+    amplifying whatever direction the head already happens to be pointing in for the
+    current input, rather than injecting the learned refusal direction. A logit-lens
+    check showed the dominant refusal head's CURRENT direction in a Crescendo context
+    promotes "Sure"/"Certainly" (i.e. compliance-opener tokens), so multiplicative
+    scaling was reinforcing compliance, not suppressing it. This loads the same
+    steering vectors the GCG-side defense uses, for additive injection instead.
+    """
+    candidates = [
+        SCRIPT_DIR / "steering_vectors_50.pt",
+        SCRIPT_DIR.parent / "code" / "steering_vectors_50.pt",
+        SCRIPT_DIR.parent / "bipolar_defense_repo" / "code" / "steering_vectors_50.pt",
+    ]
+    for path in candidates:
+        if path.exists():
+            raw_sv = torch.load(path, map_location="cuda", weights_only=True)
+            steering_vectors = {
+                (int(k.split("H")[0][1:]), int(k.split("H")[1])): v.to("cuda", dtype=torch.bfloat16)
+                for k, v in raw_sv.items()
+            }
+            print(f"Loaded {len(steering_vectors)} steering vectors from {path}")
+            return steering_vectors
+    raise FileNotFoundError(f"No steering_vectors_50.pt found. Tried: {[str(c) for c in candidates]}")
+
+
 def execute_pipeline(model, tokenizer, is_defended=False, multiplier=3.0, scenario_filter=None):
     datasets = build_datasets(tokenizer)
     if scenario_filter:
@@ -241,6 +274,7 @@ def execute_pipeline(model, tokenizer, is_defended=False, multiplier=3.0, scenar
     print(f"Unconditional Bipolar Defense: {'[ACTIVE, multiplier=' + str(multiplier) + 'x]' if is_defended else '[OFF]'}\n")
 
     refusal_nodes, compliance_nodes = load_circuit()
+    steering_vectors = load_steering_vectors() if is_defended else {}
 
     num_heads = model.config.num_attention_heads
     hidden_size = model.config.hidden_size
@@ -275,11 +309,12 @@ def execute_pipeline(model, tokenizer, is_defended=False, multiplier=3.0, scenar
                     for node in refusal_nodes:
                         if node["layer"] == l:
                             start, end = node["head"] * head_dim, (node["head"] + 1) * head_dim
+                            sv = steering_vectors.get((l, node["head"]))
                             if raw_input.dim() == 3:
-                                if is_defended: raw_input[:, -1, start:end] *= multiplier
+                                if is_defended and sv is not None: raw_input[:, -1, start:end] += multiplier * sv
                                 saved_refusals.append(raw_input[:, -1, start:end].save())
                             else:
-                                if is_defended: raw_input[-1, start:end] *= multiplier
+                                if is_defended and sv is not None: raw_input[-1, start:end] += multiplier * sv
                                 saved_refusals.append(raw_input[-1, start:end].save())
                     for node in compliance_nodes:
                         if node["layer"] == l:
@@ -317,7 +352,9 @@ def execute_pipeline(model, tokenizer, is_defended=False, multiplier=3.0, scenar
                             for node in refusal_nodes:
                                 if node["layer"] == layer_idx:
                                     s, e = node["head"] * head_dim, (node["head"] + 1) * head_dim
-                                    hidden[:, -1, s:e] *= multiplier
+                                    sv = steering_vectors.get((layer_idx, node["head"]))
+                                    if sv is not None:
+                                        hidden[:, -1, s:e] += multiplier * sv
                             for node in compliance_nodes:
                                 if node["layer"] == layer_idx:
                                     s, e = node["head"] * head_dim, (node["head"] + 1) * head_dim

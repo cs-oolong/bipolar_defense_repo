@@ -9,6 +9,7 @@ __pycache__/
 !figures/*.pdf
 *.pt
 !code/*.pt
+!crescendo/*.pt
 *.json
 !code/*.json
 !crescendo/*.json
