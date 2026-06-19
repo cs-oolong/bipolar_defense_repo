@@ -110,7 +110,9 @@ def dla_for_turn(model, tokenizer, prompt, refusal_nodes, compliance_nodes, head
     with model.trace(prompt):
         # The real accumulated residual stream right before the final norm - used to
         # correctly co-scale every head's isolated contribution by the SAME frozen factor.
-        real_residual = model.model.norm.input[0][:, -1, :].save()
+        norm_input = model.model.norm.input[0]
+        real_residual = (norm_input[:, -1, :] if norm_input.dim() == 3
+                          else norm_input[-1, :].unsqueeze(0)).save()
 
         for l in all_layers:
             raw_input = model.model.layers[l].self_attn.o_proj.input[0]
