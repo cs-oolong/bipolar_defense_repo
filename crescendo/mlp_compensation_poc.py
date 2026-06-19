@@ -93,21 +93,32 @@ def unwrap(t):
 
 def capture_mlp_outputs(model, prompt, num_layers, compliance_nodes=None, head_dim=None):
     """If compliance_nodes is provided, zero-ablates them in-place before capturing
-    (the "defended" pass); otherwise captures the clean, unmodified pass."""
+    (the "defended" pass); otherwise captures the clean, unmodified pass.
+
+    Single strictly-ascending loop over layers 0..num_layers-1, applying any
+    compliance-head ablation for a layer immediately before capturing that same
+    layer's MLP output. A previous version requested ablation for compliance
+    layers (which can be deeper than layer 0) in a separate loop BEFORE the MLP
+    capture loop started from layer 0 - referencing a later-in-architecture module
+    before an earlier one in code order caused a MissedProviderError elsewhere in
+    this codebase (dla_decomposition_poc.py), so this avoids the same risk."""
+    compliance_by_layer = {}
+    if compliance_nodes:
+        for node in compliance_nodes:
+            compliance_by_layer.setdefault(node["layer"], []).append(node)
+
     saved = {}
     with model.trace(prompt):
-        if compliance_nodes:
-            comp_layers = sorted({n["layer"] for n in compliance_nodes})
-            for l in comp_layers:
-                raw = model.model.layers[l].self_attn.o_proj.input[0]
-                for node in compliance_nodes:
-                    if node["layer"] == l:
-                        s, e = node["head"] * head_dim, (node["head"] + 1) * head_dim
-                        if raw.dim() == 3:
-                            raw[:, -1, s:e] = 0.0
-                        else:
-                            raw[-1, s:e] = 0.0
         for l in range(num_layers):
+            if l in compliance_by_layer:
+                raw = model.model.layers[l].self_attn.o_proj.input[0]
+                for node in compliance_by_layer[l]:
+                    s, e = node["head"] * head_dim, (node["head"] + 1) * head_dim
+                    if raw.dim() == 3:
+                        raw[:, -1, s:e] = 0.0
+                    else:
+                        raw[-1, s:e] = 0.0
+
             mlp_out = unwrap(model.model.layers[l].mlp.output)
             sliced = mlp_out[:, -1, :] if mlp_out.dim() == 3 else mlp_out[-1, :].unsqueeze(0)
             saved[l] = sliced.save()

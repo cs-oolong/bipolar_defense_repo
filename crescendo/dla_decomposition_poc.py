@@ -105,15 +105,15 @@ def get_diff_direction(model, tokenizer):
 
 def dla_for_turn(model, tokenizer, prompt, refusal_nodes, compliance_nodes, head_dim, diff_direction):
     all_layers = sorted({n["layer"] for n in refusal_nodes} | {n["layer"] for n in compliance_nodes})
+    num_layers = model.config.num_hidden_layers
     saved = {}
 
     with model.trace(prompt):
-        # The real accumulated residual stream right before the final norm - used to
-        # correctly co-scale every head's isolated contribution by the SAME frozen factor.
-        norm_input = model.model.norm.input[0]
-        real_residual = (norm_input[:, -1, :] if norm_input.dim() == 3
-                          else norm_input[-1, :].unsqueeze(0)).save()
-
+        # Per-layer head contributions first, then the final residual stream last -
+        # matching real execution order (layers 0..N-1 run, then the final norm).
+        # Requesting the final-norm-adjacent capture BEFORE earlier layers in code
+        # previously caused nnsight to never reach layer 18's o_proj
+        # (MissedProviderError) - this ordering fixed it.
         for l in all_layers:
             raw_input = model.model.layers[l].self_attn.o_proj.input[0]
             weight = model.model.layers[l].self_attn.o_proj.weight
@@ -127,6 +127,16 @@ def dla_for_turn(model, tokenizer, prompt, refusal_nodes, compliance_nodes, head
                     s, e = node["head"] * head_dim, (node["head"] + 1) * head_dim
                     head_out = raw_input[:, -1, s:e] if raw_input.dim() == 3 else raw_input[-1, s:e].unsqueeze(0)
                     saved[(l, node["head"], "compliance")] = (head_out @ weight[:, s:e].T).save()
+
+        # The real accumulated residual stream, captured via the last decoder layer's
+        # OUTPUT (architecturally identical to model.model.norm's input - Qwen2Model
+        # does `hidden_states = self.norm(hidden_states)` right after the layer loop -
+        # but accessing .output on a layer rather than .input on norm avoided whatever
+        # caused the ordering issue above).
+        last_layer_out = model.model.layers[num_layers - 1].output
+        last_layer_out = last_layer_out[0] if isinstance(last_layer_out, tuple) else last_layer_out
+        real_residual = (last_layer_out[:, -1, :] if last_layer_out.dim() == 3
+                          else last_layer_out[-1, :].unsqueeze(0)).save()
 
     real_residual = resolve(real_residual).float()
     rms_real = torch.sqrt((real_residual ** 2).mean(dim=-1, keepdim=True) + EPS)
