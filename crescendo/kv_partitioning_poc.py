@@ -32,6 +32,8 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
 LAMBDA = 0.3  # down-weight factor for untrusted (assistant-generated) tokens
 SCRIPT_DIR = Path(__file__).resolve().parent
+RESULTS_DIR = SCRIPT_DIR / "results"
+RESULTS_DIR.mkdir(exist_ok=True)
 
 
 def load_model():
@@ -168,7 +170,7 @@ def run_kv_partitioning_poc():
     turns = build_turns_with_trust(tokenizer)
     results = measure_partitioning_effect(model, tokenizer, turns, refusal_nodes, lam=LAMBDA)
 
-    with open(SCRIPT_DIR / "kv_partitioning_poc_results.json", "w") as f:
+    with open(RESULTS_DIR / "kv_partitioning_poc_results.json", "w") as f:
         json.dump({"lambda": LAMBDA, "turns": results}, f, indent=2)
 
     print("\n" + "=" * 70)
@@ -179,7 +181,7 @@ def run_kv_partitioning_poc():
         delta = r["avg_trusted_pct_after"] - r["avg_trusted_pct_before"]
         print(f"{turn_name:<28} {r['avg_trusted_pct_before']:>9.1f}% {r['avg_trusted_pct_after']:>9.1f}% {delta:>+9.1f}%")
 
-    print("\nSaved full per-head results to kv_partitioning_poc_results.json")
+    print(f"\nSaved full per-head results to {RESULTS_DIR / 'kv_partitioning_poc_results.json'}")
     print("\nNOTE: this validates the redistribution math on real attention weights.")
     print("Feeding this back into generation (does the output actually change) is the")
     print("next milestone, requiring either a custom per-head attention_mask injected")
