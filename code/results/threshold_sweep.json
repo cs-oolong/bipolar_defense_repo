@@ -1,0 +1,93 @@
+{
+  "sweep": [
+    {
+      "tau": 5.4563,
+      "trigger_rate_harmful": 1.0,
+      "trigger_rate_benign": 0.8,
+      "precision": 0.5555555555401235,
+      "recall": 1.0,
+      "f1": 0.7142857138137755
+    },
+    {
+      "tau": 5.833,
+      "trigger_rate_harmful": 1.0,
+      "trigger_rate_benign": 0.6,
+      "precision": 0.6249999999804688,
+      "recall": 1.0,
+      "f1": 0.7692307687426035
+    },
+    {
+      "tau": 6.13,
+      "trigger_rate_harmful": 1.0,
+      "trigger_rate_benign": 0.4,
+      "precision": 0.714285714260204,
+      "recall": 1.0,
+      "f1": 0.833333332829861
+    },
+    {
+      "tau": 6.5654,
+      "trigger_rate_harmful": 1.0,
+      "trigger_rate_benign": 0.2,
+      "precision": 0.8333333332986111,
+      "recall": 1.0,
+      "f1": 0.9090909085743802
+    },
+    {
+      "tau": 7.5505,
+      "trigger_rate_harmful": 0.9,
+      "trigger_rate_benign": 0.1,
+      "precision": 0.899999999955,
+      "recall": 0.9,
+      "f1": 0.8999999994775
+    },
+    {
+      "tau": 7.6522,
+      "trigger_rate_harmful": 0.85,
+      "trigger_rate_benign": 0.1,
+      "precision": 0.8947368420581717,
+      "recall": 0.85,
+      "f1": 0.8717948712728467
+    },
+    {
+      "tau": 8.3737,
+      "trigger_rate_harmful": 0.75,
+      "trigger_rate_benign": 0.05,
+      "precision": 0.9374999999414062,
+      "recall": 0.75,
+      "f1": 0.833333332816358
+    },
+    {
+      "tau": 9.1704,
+      "trigger_rate_harmful": 0.6,
+      "trigger_rate_benign": 0.0,
+      "precision": 0.9999999999166667,
+      "recall": 0.6,
+      "f1": 0.7499999995078124
+    },
+    {
+      "tau": 9.6069,
+      "trigger_rate_harmful": 0.4,
+      "trigger_rate_benign": 0.0,
+      "precision": 0.999999999875,
+      "recall": 0.4,
+      "f1": 0.571428571
+    },
+    {
+      "tau": 9.9643,
+      "trigger_rate_harmful": 0.2,
+      "trigger_rate_benign": 0.0,
+      "precision": 0.99999999975,
+      "recall": 0.2,
+      "f1": 0.3333333330416667
+    }
+  ],
+  "optimal_tau": 6.5654,
+  "optimal_metrics": {
+    "tau": 6.5654,
+    "trigger_rate_harmful": 1.0,
+    "trigger_rate_benign": 0.2,
+    "precision": 0.8333333332986111,
+    "recall": 1.0,
+    "f1": 0.9090909085743802
+  }
+}

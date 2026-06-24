@@ -7,10 +7,13 @@ __pycache__/
 *.toc
 *.pdf
 !figures/*.pdf
+!code/results/*.pdf
 *.pt
 !code/*.pt
 !crescendo/*.pt
+!code/results/*.pt
 *.json
 !code/*.json
 !crescendo/*.json
+!code/results/*.json
 .ipynb_checkpoints/
